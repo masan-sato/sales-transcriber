@@ -1,0 +1,171 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Sales Transcriber - Audio transcription service using Amazon Transcribe
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Timeout: 30
+    MemorySize: 256
+    Environment:
+      Variables:
+        AUDIO_BUCKET: !Ref AudioBucket
+        OUTPUT_BUCKET: !Ref TranscribeOutputBucket
+        REGION: !Ref AWS::Region
+  Api:
+    Cors:
+      AllowMethods: "'GET,POST,OPTIONS'"
+      AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
+      AllowOrigin: "'*'"
+
+Resources:
+  # --------------------------------------------------
+  # S3: 音声ファイル保管バケット
+  # --------------------------------------------------
+  AudioBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "sales-transcriber-audio-${AWS::AccountId}-${AWS::Region}"
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldAudio
+            Status: Enabled
+            ExpirationInDays: 7
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ["*"]
+            AllowedMethods: [GET, PUT, POST, DELETE, HEAD]
+            AllowedOrigins: ["*"]
+            MaxAge: 3000
+
+  # --------------------------------------------------
+  # S3: Transcribe 出力先バケット
+  # --------------------------------------------------
+  TranscribeOutputBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "sales-transcriber-output-${AWS::AccountId}-${AWS::Region}"
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldOutput
+            Status: Enabled
+            ExpirationInDays: 7
+
+  # --------------------------------------------------
+  # Lambda 実行ロール
+  # --------------------------------------------------
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "sales-transcriber-lambda-role-${AWS::Region}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: TranscriberPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:DeleteObject
+                Resource:
+                  - !Sub "arn:aws:s3:::sales-transcriber-audio-${AWS::AccountId}-${AWS::Region}/*"
+                  - !Sub "arn:aws:s3:::sales-transcriber-output-${AWS::AccountId}-${AWS::Region}/*"
+              - Effect: Allow
+                Action:
+                  - transcribe:StartTranscriptionJob
+                  - transcribe:GetTranscriptionJob
+                  - transcribe:ListTranscriptionJobs
+                Resource: "*"
+
+  # --------------------------------------------------
+  # Lambda: 署名付きURL発行（音声ファイルアップロード用）
+  # --------------------------------------------------
+  UploadFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: sales-transcriber-upload
+      CodeUri: lambda/upload/
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Events:
+        UploadApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TranscriberApi
+            Path: /upload
+            Method: post
+
+  # --------------------------------------------------
+  # Lambda: 文字起こしジョブ開始
+  # --------------------------------------------------
+  TranscribeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: sales-transcriber-transcribe
+      CodeUri: lambda/transcribe/
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 60
+      Events:
+        TranscribeApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TranscriberApi
+            Path: /transcribe
+            Method: post
+
+  # --------------------------------------------------
+  # Lambda: 文字起こし結果取得
+  # --------------------------------------------------
+  ResultFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: sales-transcriber-result
+      CodeUri: lambda/result/
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Events:
+        ResultApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TranscriberApi
+            Path: /result/{jobId}
+            Method: get
+
+  # --------------------------------------------------
+  # API Gateway
+  # --------------------------------------------------
+  TranscriberApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: sales-transcriber-api
+      StageName: prod
+      Cors:
+        AllowMethods: "'GET,POST,OPTIONS'"
+        AllowHeaders: "'Content-Type'"
+        AllowOrigin: "'*'"
+
+Outputs:
+  ApiEndpoint:
+    Description: "API Gateway エンドポイントURL"
+    Value: !Sub "https://${TranscriberApi}.execute-api.${AWS::Region}.amazonaws.com/prod"
+    Export:
+      Name: SalesTranscriberApiEndpoint
+
+  AudioBucketName:
+    Description: "音声ファイル保管S3バケット名"
+    Value: !Ref AudioBucket
+
+  OutputBucketName:
+    Description: "Transcribe出力S3バケット名"
+    Value: !Ref TranscribeOutputBucket
