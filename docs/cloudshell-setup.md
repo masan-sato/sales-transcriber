@@ -51,11 +51,10 @@ git version 2.x.x
 GitHub Secrets をコマンドラインから設定するために GitHub CLI をインストールします。
 
 ```bash
-# GitHub CLI のインストール
-curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-sudo apt update
-sudo apt install gh -y
+# GitHub CLI のインストール（Amazon Linux 2023 / CloudShell 用）
+sudo dnf install -y 'dnf-command(config-manager)'
+sudo dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo
+sudo dnf install gh --repo gh-cli -y
 
 # バージョン確認
 gh --version
@@ -97,12 +96,10 @@ gh auth status
 # ホームディレクトリに移動
 cd ~
 
-# リポジトリをクローン（YOUR_USERNAME を自分のGitHubユーザー名に変更）
-git clone https://github.com/YOUR_USERNAME/sales-transcriber.git
+# gh CLI 経由でクローン（認証が自動で使われます）
+gh repo clone masan-sato/sales-transcriber
 cd sales-transcriber
 ```
-
-> **リポジトリがまだない場合:** GitHubで `sales-transcriber` という名前の新しいリポジトリを作成し、このコードをプッシュしてください。
 
 ---
 
@@ -216,14 +213,14 @@ VITE_AWS_REGION    Updated  ...
 gh api \
   --method PUT \
   -H "Accept: application/vnd.github+json" \
-  /repos/:owner/:repo/pages \
+  /repos/masan-sato/sales-transcriber/pages \
   -f source='{"branch":"main","path":"/"}' 2>/dev/null || true
 
 # Pages のソースを GitHub Actions に変更
 gh api \
   --method POST \
   -H "Accept: application/vnd.github+json" \
-  /repos/:owner/:repo/pages \
+  /repos/masan-sato/sales-transcriber/pages \
   -f build_type="workflow" 2>/dev/null || true
 ```
 
@@ -380,15 +377,15 @@ aws s3 rb s3://sales-transcriber-sam-${ACCOUNT_ID} --force
 aws --version && sam --version && node --version && git --version
 
 # ---- Step 2: GitHub CLI インストール ----
-curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-sudo apt update && sudo apt install gh -y
+sudo dnf install -y 'dnf-command(config-manager)'
+sudo dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo
+sudo dnf install gh --repo gh-cli -y
 
 # ---- Step 3: GitHub ログイン ----
 gh auth login
 
 # ---- Step 4: クローン ----
-cd ~ && git clone https://github.com/YOUR_USERNAME/sales-transcriber.git && cd sales-transcriber
+cd ~ && gh repo clone masan-sato/sales-transcriber && cd sales-transcriber
 
 # ---- Step 5: SAM デプロイ ----
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
