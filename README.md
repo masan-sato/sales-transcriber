@@ -18,29 +18,30 @@
 ## システム構成
 
 ```
-ブラウザ (GitHub Pages)
+ブラウザ (GitHub Pages)  ← ここで使用します
     │
     ├── 録音 / ファイルアップロード
     │
     ▼
-Amazon API Gateway
+Amazon API Gateway  ← 管理者が構築
     │
-    ├── POST /transcribe  → AWS Lambda → Amazon Transcribe
-    │                                         │
-    │                                         └── Amazon S3（音声ファイル保管）
+    ├── POST /stream      → AWS Lambda (Stream) → Amazon Transcribe Streaming
+    ├── POST /transcribe  → AWS Lambda (Batch)  → Amazon Transcribe
+    │                                                  │
+    │                                                  └── Amazon S3（音声保管）
     │
-    └── GET  /result/{id} → AWS Lambda → Amazon Transcribe（結果取得）
+    └── GET  /result/{id} → AWS Lambda (Result) → Amazon Transcribe（取得）
 ```
 
-### 使用AWSサービス
+### AWS サービス（管理者が構築・管理）
 
 | サービス | 用途 |
 |---|---|
-| **Amazon Transcribe** | 音声→テキスト変換（日本語対応） |
+| **Amazon Transcribe** | 音声→テキスト変換（日本語、ストリーミング対応） |
 | **Amazon S3** | 音声ファイルの一時保管 |
-| **AWS Lambda** | バックエンド処理 |
+| **AWS Lambda** | バックエンド処理（4 関数） |
 | **Amazon API Gateway** | フロントエンドとのREST API |
-| **AWS IAM** | アクセス権限管理 |
+| **AWS CloudFormation** | インフラストラクチャ定義（SAM） |
 
 ## 技術スタック
 
@@ -57,47 +58,37 @@ Amazon API Gateway
 
 ## セットアップ
 
+**AWS インフラ（Lambda・API Gateway・S3）は、チーム内の AWS 管理者が既に構築済みです。**
+
+個人の Windows PC からアプリを使えるようにセットアップするには、以下の手順書を参照してください：
+
+👉 **[Windows PC セットアップガイド](docs/windows-deploy-setup.md)**
+
+### クイックスタート（環境が整っている場合）
+
+```powershell
+# GitHub 認証
+gh auth login
+
+# リポジトリクローン
+gh repo clone masan-sato/sales-transcriber
+cd sales-transcriber
+
+# GitHub Secrets 設定（AWS 管理者から API エンドポイント URL を受け取る）
+gh secret set VITE_API_ENDPOINT --body "https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com/prod"
+gh secret set VITE_AWS_REGION --body "ap-northeast-1"
+
+# ブラウザでアクセス
+# https://masan-sato.github.io/sales-transcriber/
+```
+
 ### 前提条件
 
-- Node.js 20以上
-- AWS アカウント
-- AWS CLI（設定済み）
+- Windows 10/11
+- Node.js 20 以上
+- Git
 - GitHub CLI（`gh`）
-
-### 1. リポジトリのクローン
-
-```bash
-git clone https://github.com/masan-sato/sales-transcriber.git
-cd sales-transcriber
-```
-
-### 2. 依存パッケージのインストール
-
-```bash
-npm install
-```
-
-### 3. AWS インフラのデプロイ
-
-```bash
-cd infrastructure
-npm install
-npm run deploy
-```
-
-デプロイ後に表示される API Gateway のエンドポイントURLをメモします。
-
-### 4. 環境変数の設定
-
-```bash
-cp .env.example .env.local
-```
-
-`.env.local` を編集：
-
-```env
-VITE_API_ENDPOINT=https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com/prod
-VITE_AWS_REGION=ap-northeast-1
+- AWS インフラ管理者から API エンドポイント URL
 ```
 
 ### 5. ローカル開発サーバー起動
