@@ -86,6 +86,10 @@ Resources:
                   - transcribe:GetTranscriptionJob
                   - transcribe:ListTranscriptionJobs
                 Resource: "*"
+              - Effect: Allow
+                Action:
+                  - transcribe:StartStreamTranscription
+                Resource: "*"
 
   # --------------------------------------------------
   # Lambda: 署名付きURL発行（音声ファイルアップロード用）
@@ -141,6 +145,26 @@ Resources:
             RestApiId: !Ref TranscriberApi
             Path: /result/{jobId}
             Method: get
+
+  # --------------------------------------------------
+  # Lambda: リアルタイム文字起こし（ストリーミング）
+  # --------------------------------------------------
+  StreamFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: sales-transcriber-stream
+      CodeUri: lambda/stream/
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 60
+      MemorySize: 512
+      Events:
+        StreamApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TranscriberApi
+            Path: /stream
+            Method: post
 
   # --------------------------------------------------
   # API Gateway

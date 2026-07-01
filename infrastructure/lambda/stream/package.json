@@ -1,0 +1,8 @@
+{
+  "name": "sales-transcriber-stream",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-transcribe-streaming": "^3.0.0"
+  }
+}
