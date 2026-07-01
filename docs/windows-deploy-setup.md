@@ -5,6 +5,29 @@
 
 ---
 
+## 📌 複数ユーザーでの利用パターン
+
+**同じ AWS アカウント内で複数の IAM User がいる場合の選択肢：**
+
+### パターン A: 推奨（インフラ共有）✅
+
+| 対象 | 実行内容 |
+|---|---|
+| **最初の 1 人** | Step 1 ～ Step 19 すべて実行（AWS インフラをデプロイ） |
+| **2 人目以降** | [スキップ手順](#複数ユーザー向けスキップ手順-aws-インフラ共有) を参照 |
+
+**メリット：** 最速、費用最小、AWS リソース 1 セット  
+**デメリット：** 最初の 1 人が完全なセットアップが必要
+
+### パターン B: 個別デプロイ
+
+全員が Step 1 ～ Step 19 を実行します。実行時に **Step 12, 13, 18** でユーザー名を含めた別名を使う（衝突を避けるため）。
+
+**メリット：** 各自完全に独立したテスト環境  
+**デメリット：** AWS リソースが N 倍になり、費用が増加
+
+---
+
 ## 前提条件
 
 | 必要なもの | 説明 |
@@ -545,6 +568,53 @@ sam deploy ^
   --s3-bucket sales-transcriber-sam-697807134024 ^
   ...
 ```
+
+---
+
+## 複数ユーザー向けスキップ手順（AWS インフラ共有）
+
+**パターン A を選んだチームの 2 人目以降** は以下の手順で完成します。
+
+### 準備：最初の 1 人から API エンドポイント URL を受け取る
+
+最初の 1 人が Step 14 で取得した URL：
+```
+https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com/prod
+```
+
+### スキップ手順（2 人目以降）
+
+```powershell
+# ---- Step 2-5: ツール確認 & インストール ----
+node --version  # v20 以上であること
+git --version
+aws --version
+sam --version
+
+# ---- Step 7: AWS 認証 ----
+aws login
+
+# ---- Step 9-10: リポジトリクローン ----
+cd ~
+gh repo clone masan-sato/sales-transcriber
+cd sales-transcriber
+
+# ---- Step 15: GitHub Secrets 設定（最初の 1 人から受け取った URL を使用）----
+$API_ENDPOINT = "https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com/prod"
+gh secret set VITE_API_ENDPOINT --body "$API_ENDPOINT"
+gh secret set VITE_AWS_REGION --body "ap-northeast-1"
+
+# ---- Step 17-18: デプロイ & アクセス ----
+# ソースコード変更がなければ不要。変更がある場合のみ：
+git add .
+git commit -m "your commit message"
+git push origin main
+
+# ブラウザで以下にアクセス
+# https://masan-sato.github.io/sales-transcriber/
+```
+
+**所要時間:** 5〜10 分（AWS インフラのデプロイは不要）
 
 ---
 

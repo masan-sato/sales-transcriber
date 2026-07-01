@@ -378,6 +378,46 @@ aws s3 rb s3://sales-transcriber-sam-${ACCOUNT_ID} --force
 
 ---
 
+## 複数ユーザー向けスキップ手順（AWS インフラ共有）
+
+**パターン A を選んだチームの 2 人目以降** は以下の手順で完成します。
+
+### 準備：最初の 1 人から API エンドポイント URL を受け取る
+
+最初の 1 人が Step 8 で取得した URL：
+```
+https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com/prod
+```
+
+### スキップ手順（2 人目以降）
+
+```bash
+# ---- GitHub 認証（初回のみ）----
+gh auth login
+# → "GitHub.com" 選択 → HTTPS 選択 → "ブラウザでログイン" 選択
+
+# ---- リポジトリクローン ----
+gh repo clone masan-sato/sales-transcriber
+cd sales-transcriber
+
+# ---- GitHub Secrets 設定（最初の 1 人から受け取った URL を使用）----
+gh secret set VITE_API_ENDPOINT --body "https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com/prod"
+gh secret set VITE_AWS_REGION --body "ap-northeast-1"
+
+# ---- デプロイ（ソースコード変更がない場合は不要）----
+# 変更がある場合のみ：
+git add .
+git commit -m "your commit message"
+git push origin main
+
+# ブラウザで以下にアクセス
+# https://masan-sato.github.io/sales-transcriber/
+```
+
+**所要時間:** 5 分（AWS インフラのデプロイは不要）
+
+---
+
 ## 全コマンド早見表
 
 ```bash
