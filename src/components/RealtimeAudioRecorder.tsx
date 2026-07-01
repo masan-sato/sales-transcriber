@@ -2,6 +2,7 @@ import { useState, useRef, useCallback } from 'react';
 
 interface RealtimeAudioRecorderProps {
   onRecordingComplete: (file: Blob) => void;
+  onPartialAudio?: (file: Blob) => void;
   isProcessing?: boolean;
 }
 
@@ -52,13 +53,18 @@ function createWavBlob(pcmData: Float32Array, sampleRate: number): Blob {
   return new Blob([arrayBuffer], { type: 'audio/wav' });
 }
 
-export function RealtimeAudioRecorder({ onRecordingComplete, isProcessing }: RealtimeAudioRecorderProps) {
+export function RealtimeAudioRecorder({
+  onRecordingComplete,
+  onPartialAudio,
+  isProcessing,
+}: RealtimeAudioRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const audioContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const pcmChunksRef = useRef<Float32Array[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const streamTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const startRecording = useCallback(async () => {
     pcmChunksRef.current = [];
@@ -81,19 +87,51 @@ export function RealtimeAudioRecorder({ onRecordingComplete, isProcessing }: Rea
     processor.connect(audioContext.destination);
 
     setIsRecording(true);
+
+    // 毎秒、タイマーを更新
     timerRef.current = setInterval(() => {
       setSeconds((s) => s + 1);
     }, 1000);
-  }, [onRecordingComplete]);
+
+    // 1 秒ごとに部分的な音声を送信
+    streamTimerRef.current = setInterval(() => {
+      if (pcmChunksRef.current.length > 0 && onPartialAudio) {
+        // PCM データを結合
+        const totalLength = pcmChunksRef.current.reduce(
+          (sum, chunk) => sum + chunk.length,
+          0
+        );
+        const pcmData = new Float32Array(totalLength);
+        let offset = 0;
+        for (const chunk of pcmChunksRef.current) {
+          pcmData.set(chunk, offset);
+          offset += chunk.length;
+        }
+
+        // WAV フォーマットで Blob を作成
+        const wavBlob = createWavBlob(pcmData, audioContext.sampleRate);
+        onPartialAudio(wavBlob);
+      }
+    }, 1000);
+  }, [onPartialAudio]);
 
   const stopRecording = useCallback(() => {
     if (!audioContextRef.current || !processorRef.current) return;
+
+    // ストリーミングタイマーを停止
+    if (streamTimerRef.current) {
+      clearInterval(streamTimerRef.current);
+      streamTimerRef.current = null;
+    }
 
     processorRef.current.disconnect();
     audioContextRef.current.close();
 
     // PCM データを結合
-    const totalLength = pcmChunksRef.current.reduce((sum, chunk) => sum + chunk.length, 0);
+    const totalLength = pcmChunksRef.current.reduce(
+      (sum, chunk) => sum + chunk.length,
+      0
+    );
     const pcmData = new Float32Array(totalLength);
     let offset = 0;
     for (const chunk of pcmChunksRef.current) {
@@ -101,8 +139,11 @@ export function RealtimeAudioRecorder({ onRecordingComplete, isProcessing }: Rea
       offset += chunk.length;
     }
 
-    // WAV フォーマットで Blob を作成（Transcribe Streaming が対応している形式）
-    const wavBlob = createWavBlob(pcmData, audioContextRef.current?.sampleRate || 16000);
+    // WAV フォーマットで Blob を作成（最終データ）
+    const wavBlob = createWavBlob(
+      pcmData,
+      audioContextRef.current?.sampleRate || 16000
+    );
     onRecordingComplete(wavBlob);
 
     setIsRecording(false);
@@ -143,45 +184,64 @@ export function RealtimeAudioRecorder({ onRecordingComplete, isProcessing }: Rea
   );
 }
 
-  const formatTime = (s: number) => {
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
-  };
-
-  return (
-    <div style={styles.container}>
-      <h2 style={styles.title}>🎤 リアルタイム録音</h2>
-      {isRecording && (
-        <div style={styles.timer}>
-          <span style={styles.dot} /> {formatTime(seconds)} 録音中...
-        </div>
-      )}
-      {isProcessing && (
-        <div style={styles.processing}>
-          <span style={styles.spinner} /> 処理中...
-        </div>
-      )}
-      <button
-        style={isRecording ? styles.stopBtn : styles.startBtn}
-        onClick={isRecording ? stopRecording : startRecording}
-        disabled={isProcessing}
-      >
-        {isRecording ? '■ 録音停止' : '● 録音開始'}
-      </button>
-      <p style={styles.note}>マイクへのアクセス許可が必要です</p>
-    </div>
-  );
-}
-
 const styles: Record<string, React.CSSProperties> = {
-  container: { background: '#fff', borderRadius: 12, padding: 24, marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' },
+  container: {
+    background: '#fff',
+    borderRadius: 12,
+    padding: 24,
+    marginBottom: 16,
+    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+  },
   title: { marginBottom: 16, fontSize: 18 },
-  timer: { color: '#e53e3e', marginBottom: 12, fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 8 },
-  dot: { width: 10, height: 10, background: '#e53e3e', borderRadius: '50%', display: 'inline-block', animation: 'pulse 1s infinite' },
-  processing: { color: '#3182ce', marginBottom: 12, fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 8 },
-  spinner: { display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: '#3182ce', animation: 'spin 1s linear infinite' },
-  startBtn: { background: '#3182ce', color: '#fff', border: 'none', borderRadius: 8, padding: '12px 24px', fontSize: 16, fontWeight: 'bold' },
-  stopBtn: { background: '#e53e3e', color: '#fff', border: 'none', borderRadius: 8, padding: '12px 24px', fontSize: 16, fontWeight: 'bold' },
+  timer: {
+    color: '#e53e3e',
+    marginBottom: 12,
+    fontWeight: 'bold',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+  },
+  dot: {
+    width: 10,
+    height: 10,
+    background: '#e53e3e',
+    borderRadius: '50%',
+    display: 'inline-block',
+    animation: 'pulse 1s infinite',
+  },
+  processing: {
+    color: '#3182ce',
+    marginBottom: 12,
+    fontWeight: 'bold',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+  },
+  spinner: {
+    display: 'inline-block',
+    width: 10,
+    height: 10,
+    borderRadius: '50%',
+    background: '#3182ce',
+    animation: 'spin 1s linear infinite',
+  },
+  startBtn: {
+    background: '#3182ce',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 8,
+    padding: '12px 24px',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  stopBtn: {
+    background: '#e53e3e',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 8,
+    padding: '12px 24px',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
   note: { marginTop: 8, fontSize: 12, color: '#718096' },
 };
