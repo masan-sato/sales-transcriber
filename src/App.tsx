@@ -12,11 +12,14 @@ function App() {
   const normal = useTranscribe();
   const realtime = useRealtimeTranscribe();
 
-  const isProcessing = mode === 'normal' ? (normal.status === 'uploading' || normal.status === 'processing') : realtime.isStreaming;
+  const isProcessing = mode === 'normal'
+    ? (normal.status === 'uploading' || normal.status === 'processing')
+    : realtime.isFinalizing; // 録音中ではなく最終処理中だけスピナー表示
   const error = mode === 'normal' ? normal.error : realtime.error;
-  const result = mode === 'normal' && normal.status === 'completed' 
-    ? normal.result 
-    : mode === 'realtime' && realtime.transcript 
+  // リアルタイムモードは録音が完全に止まり最終結果が出た時だけ「result」とみなす
+  const result = mode === 'normal' && normal.status === 'completed'
+    ? normal.result
+    : mode === 'realtime' && !realtime.isStreaming && !realtime.isFinalizing && realtime.transcript
     ? { transcript: realtime.transcript, speakerSegments: realtime.speakerSegments }
     : null;
 
@@ -65,7 +68,7 @@ function App() {
         )}
 
         {/* 入力エリア */}
-        {result === null && (
+        {(mode === 'normal' ? result === null : !result) && (
           <>
             {mode === 'normal' ? (
               <>
@@ -73,10 +76,10 @@ function App() {
                 <FileUploader onFileSelected={handleNormalRecord} disabled={isProcessing} />
               </>
             ) : (
-              <RealtimeAudioRecorder 
-                onRecordingComplete={handleRealtimeRecordComplete} 
+              <RealtimeAudioRecorder
+                onRecordingComplete={handleRealtimeRecordComplete}
                 onPartialAudio={handleRealtimePartialAudio}
-                isProcessing={isProcessing}
+                isProcessing={realtime.isFinalizing}
                 onStartRecording={() => realtime.startStreaming()}
                 onStopRecording={() => {}}
               />
@@ -84,12 +87,20 @@ function App() {
           </>
         )}
 
-        {/* 処理中 */}
+        {/* リアルタイム録音中の部分トランスクリプト */}
+        {mode === 'realtime' && realtime.isStreaming && realtime.transcript && (
+          <div style={styles.partialCard}>
+            <p style={styles.partialLabel}>📝 リアルタイム文字起こし（録音中）</p>
+            <p style={styles.partialText}>{realtime.transcript}</p>
+          </div>
+        )}
+
+        {/* 処理中（最終処理のみ） */}
         {isProcessing && (
           <div style={styles.progressCard}>
             <div style={styles.spinner} />
             <p style={styles.progressText}>
-              {mode === 'normal' ? normal.progress : 'リアルタイム処理中...'}
+              {mode === 'normal' ? normal.progress : '最終処理中...'}
             </p>
           </div>
         )}
@@ -142,6 +153,9 @@ const styles: Record<string, React.CSSProperties> = {
   errorCard: { background: '#fff5f5', border: '1px solid #feb2b2', borderRadius: 12, padding: 24, marginBottom: 16, textAlign: 'center' },
   errorText: { color: '#c53030', marginBottom: 16 },
   retryBtn: { background: '#718096', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 14, fontWeight: 'bold' },
+  partialCard: { background: '#ebf8ff', border: '1px solid #bee3f8', borderRadius: 12, padding: 20, marginBottom: 16 },
+  partialLabel: { color: '#2b6cb0', fontSize: 12, fontWeight: 'bold', marginBottom: 8 },
+  partialText: { color: '#2d3748', fontSize: 14, lineHeight: 1.7, whiteSpace: 'pre-wrap' },
 };
 
 export default App;

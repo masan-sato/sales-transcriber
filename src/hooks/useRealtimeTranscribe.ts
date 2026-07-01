@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 
 export interface RealtimeTranscribeState {
   isStreaming: boolean;
+  isFinalizing: boolean;
   transcript: string;
   speakerSegments: Array<{ speaker: string; text: string }>;
   error: string | null;
@@ -10,6 +11,7 @@ export interface RealtimeTranscribeState {
 export function useRealtimeTranscribe() {
   const [state, setState] = useState<RealtimeTranscribeState>({
     isStreaming: false,
+    isFinalizing: false,
     transcript: '',
     speakerSegments: [],
     error: null,
@@ -17,9 +19,12 @@ export function useRealtimeTranscribe() {
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const lastTranscriptRef = useRef<string>('');
+  // クロージャバグ回避: state の代わりに ref でフラグを管理
+  const isStreamingRef = useRef(false);
 
   const streamPartialAudio = useCallback(async (audioBlob: Blob) => {
-    if (!state.isStreaming) return;
+    // ref を参照するため、古いクロージャの影響を受けない
+    if (!isStreamingRef.current) return;
 
     try {
       const apiEndpoint = import.meta.env.VITE_API_ENDPOINT as string;
@@ -37,43 +42,44 @@ export function useRealtimeTranscribe() {
 
       const data = await response.json();
 
-      // 新しい部分のみを抽出
       const newTranscript = data.transcript || '';
       const newSegments = data.speakerSegments || [];
 
-      // 前回のトランスクリプトより新しい部分を追加
       if (newTranscript.length > lastTranscriptRef.current.length) {
         lastTranscriptRef.current = newTranscript;
-        setState({
-          isStreaming: true,
+        setState(prev => ({
+          ...prev,
           transcript: newTranscript,
           speakerSegments: newSegments,
           error: null,
-        });
+        }));
       }
     } catch (err) {
-      // ネットワークエラーは無視（ストリーミング中なので気にしない）
       if (err instanceof Error && !err.message.includes('aborted')) {
         console.warn('Partial streaming error:', err);
       }
     }
-  }, [state.isStreaming]);
+  }, []); // 依存なし: ref を使うため安全
 
-  const startStreaming = useCallback(async () => {
-    setState({ isStreaming: true, transcript: '', speakerSegments: [], error: null });
+  const startStreaming = useCallback(() => {
+    isStreamingRef.current = true;
+    setState({ isStreaming: true, isFinalizing: false, transcript: '', speakerSegments: [], error: null });
     lastTranscriptRef.current = '';
     abortControllerRef.current = new AbortController();
   }, []);
 
   const stopStreaming = useCallback(async (finalAudioBlob: Blob) => {
+    isStreamingRef.current = false;
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
 
+    // 録音停止 → 最終処理中状態へ
+    setState(prev => ({ ...prev, isStreaming: false, isFinalizing: true }));
+
     try {
       const apiEndpoint = import.meta.env.VITE_API_ENDPOINT as string;
 
-      // 最後の完全なデータを送信
       const response = await fetch(`${apiEndpoint}/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'audio/wav' },
@@ -88,18 +94,20 @@ export function useRealtimeTranscribe() {
 
       setState({
         isStreaming: false,
+        isFinalizing: false,
         transcript: data.transcript || '',
         speakerSegments: data.speakerSegments || [],
         error: null,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : '不明なエラー';
-      setState({ isStreaming: false, transcript: '', speakerSegments: [], error: message });
+      setState({ isStreaming: false, isFinalizing: false, transcript: '', speakerSegments: [], error: message });
     }
   }, []);
 
   const reset = useCallback(() => {
-    setState({ isStreaming: false, transcript: '', speakerSegments: [], error: null });
+    isStreamingRef.current = false;
+    setState({ isStreaming: false, isFinalizing: false, transcript: '', speakerSegments: [], error: null });
     lastTranscriptRef.current = '';
   }, []);
 
