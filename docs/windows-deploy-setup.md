@@ -1,30 +1,9 @@
-# Windows PC で AWS インフラをデプロイするガイド
+# Windows PC セットアップガイド
 
-このガイドは、**Windows PC から AWS への SAM デプロイを最初からできる** ステップバイステップです。
-環境がない状態から始めても、コマンドを上から順に実行するだけで完成します。
+このガイドは、**Windows PC から Sales Transcriber アプリを使えるようにする** ステップバイステップです。
 
----
-
-## 📌 複数ユーザーでの利用パターン
-
-**同じ AWS アカウント内で複数の IAM User がいる場合の選択肢：**
-
-### パターン A: 推奨（インフラ共有）✅
-
-| 対象 | 実行内容 |
-|---|---|
-| **最初の 1 人** | Step 1 ～ Step 19 すべて実行（AWS インフラをデプロイ） |
-| **2 人目以降** | [スキップ手順](#複数ユーザー向けスキップ手順-aws-インフラ共有) を参照 |
-
-**メリット：** 最速、費用最小、AWS リソース 1 セット  
-**デメリット：** 最初の 1 人が完全なセットアップが必要
-
-### パターン B: 個別デプロイ
-
-全員が Step 1 ～ Step 19 を実行します。実行時に **Step 12, 13, 18** でユーザー名を含めた別名を使う（衝突を避けるため）。
-
-**メリット：** 各自完全に独立したテスト環境  
-**デメリット：** AWS リソースが N 倍になり、費用が増加
+**前提:** AWS インフラ（Lambda・API Gateway・S3 など）は既に共有の AWS アカウントに構築済みです。  
+このガイドでは、PC のツール設定と、デプロイに必要な GitHub Secrets の設定のみを行います。
 
 ---
 
@@ -33,9 +12,9 @@
 | 必要なもの | 説明 |
 |---|---|
 | **Windows 10/11** | Pro 以上推奨（Home でも動作可） |
-| **AWS アカウント** | https://aws.amazon.com/ で作成済み |
 | **GitHub アカウント** | https://github.com/ で作成済み |
-| **インターネット接続** | ツールのダウンロード・デプロイに必須 |
+| **API エンドポイント URL** | チーム内の AWS インフラ管理者から受け取る |
+| **インターネット接続** | ツールのダウンロードに必須 |
 
 ---
 
@@ -89,6 +68,8 @@ git version 2.x.x
 
 ## Step 3: Node.js のインストール（v20 以上が必要）
 
+まだインストールされていない場合：
+
 https://nodejs.org/ から **LTS 版** をダウンロード・実行してください。
 
 または winget でインストール：
@@ -116,27 +97,32 @@ https://git-scm.com/download/win からダウンロード・実行するか、
 winget install Git.Git
 ```
 
-確認：
+インストール後、PowerShell を **再起動** して確認：
 
 ```powershell
 git --version
 ```
 
+**Git の初期設定（初回のみ）:**
+
+```powershell
+git config --global user.email "your-email@example.com"
+git config --global user.name "Your Name"
+```
+
 ---
 
-## Step 5: AWS CLI のインストール
+## Step 5: AWS CLI のインストール（オプション）
 
-公式インストーラーから：
+リポジトリをクローンするのに不要ですが、将来的に AWS 関連の作業が必要な場合のため、インストール推奨です。
 
-https://awscli.amazonaws.com/AWSCLIV2.msi をダウンロード・実行
-
-または winget で：
+https://awscli.amazonaws.com/AWSCLIV2.msi からダウンロード・実行するか、
 
 ```powershell
 winget install Amazon.AWSCLI
 ```
 
-インストール後、PowerShell を **再起動** して確認：
+確認：
 
 ```powershell
 aws --version
@@ -144,66 +130,7 @@ aws --version
 
 ---
 
-## Step 6: SAM CLI のインストール
-
-SAM CLI をインストールするには、Docker Desktop が必要です。
-
-**Docker Desktop のインストール:**
-
-https://www.docker.com/products/docker-desktop からダウンロード・インストール
-
-インストール完了後、SAM CLI をインストール：
-
-```powershell
-winget install Amazon.SAM-CLI
-```
-
-確認：
-
-```powershell
-sam --version
-```
-
----
-
-## Step 7: AWS 認証設定
-
-AWS CLI が AWS にアクセスするための認証を設定します。
-
-```powershell
-aws login
-```
-
-ブラウザが自動で開き、AWS マネジメントコンソールでのログイン画面が表示されます。
-
-以下の流れで認証します：
-1. AWS アカウントのメールアドレスを入力
-2. パスワードを入力
-3. MFA（多要素認証）コードを入力（設定されている場合）
-4. 「アクセス権限を付与」をクリック
-
-認証完了後、PowerShell に `Updated profile default to use...` と表示されたら成功です。
-
-**確認コマンド:**
-
-```powershell
-aws sts get-caller-identity
-```
-
-以下のような JSON が表示されたら設定完了です：
-```json
-{
-    "UserId": "AIDAXXXXXXXXXXXXXX",
-    "Account": "697807134024",
-    "Arn": "arn:aws:iam::697807134024:user/your-email@example.com"
-}
-```
-
-`Account` の番号をメモしておいてください（後で使います）。
-
----
-
-## Step 8: GitHub CLI のインストール
+## Step 6: GitHub CLI のインストール
 
 ```powershell
 winget install GitHub.cli
@@ -217,7 +144,7 @@ gh --version
 
 ---
 
-## Step 9: GitHub 認証
+## Step 7: GitHub 認証
 
 ```powershell
 gh auth login
@@ -255,7 +182,7 @@ gh auth login
 
 ---
 
-## Step 10: リポジトリのクローン
+## Step 8: リポジトリのクローン
 
 GitHub から Sales Transcriber コードをダウンロードします。
 
@@ -269,114 +196,25 @@ cd sales-transcriber
 
 ---
 
-## Step 11: SAM ビルド
-
-インフラ関連のディレクトリに移動してビルドします。
-
-```powershell
-cd ~\sales-transcriber\infrastructure
-sam build
-```
-
-**成功すると以下が表示されます:**
-```
-Build Succeeded
-
-Built Artifacts  : .aws-sam\build
-Built Template   : .aws-sam\build\template.yaml
-```
-
-ビルドに 2〜3 分かかることがあります。
-
----
-
-## Step 12: S3 デプロイバケット作成
-
-SAM がデプロイ用アーティファクトを保存するバケットを作成します。
-
-```powershell
-# Step 7 でメモしたアカウント ID を設定
-$ACCOUNT_ID = "697807134024"
-
-# S3 バケットを作成
-aws s3 mb s3://sales-transcriber-sam-$ACCOUNT_ID --region ap-northeast-1
-```
-
-成功メッセージが表示されます：
-```
-make_bucket: sales-transcriber-sam-697807134024
-```
-
----
-
-## Step 13: SAM デプロイ
-
-AWS インフラ（Lambda・API Gateway・S3・IAM）を一括でデプロイします。
-
-```powershell
-sam deploy `
-  --stack-name sales-transcriber `
-  --s3-bucket sales-transcriber-sam-$ACCOUNT_ID `
-  --region ap-northeast-1 `
-  --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM
-```
-
-デプロイ中に確認プロンプトが表示されます：
-
-```
-	Changeset created successfully. arn:aws:cloudformation:ap-northeast-1:697807134024:change/...
-
-Deploy this changeset? [y/N]:
-```
-
-`y` を入力して Enter を押してください。
-
-デプロイ完了まで **3〜5 分** かかります。
-
----
-
-## Step 14: API Gateway エンドポイント URL を取得
-
-デプロイ完了後、フロントエンドで使用する API エンドポイントを取得します。
-
-```powershell
-$API_ENDPOINT = aws cloudformation describe-stacks `
-  --stack-name sales-transcriber `
-  --region ap-northeast-1 `
-  --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" `
-  --output text
-
-Write-Host "API Endpoint: $API_ENDPOINT"
-```
-
-以下のような URL が表示されます：
-```
-API Endpoint: https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com/prod
-```
-
-**この URL をメモしておいてください。** 次のステップで使用します。
-
----
-
-## Step 15: GitHub Secrets の設定
+## Step 9: GitHub Secrets の設定
 
 GitHub Actions がフロントエンドをビルドする際に必要な環境変数をセットします。
 
-まずリポジトリルートに移動：
+**準備：チーム内の AWS インフラ管理者から以下の情報を受け取る：**
+
+- API エンドポイント URL：`https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com/prod`
+
+Secret を設定：
 
 ```powershell
-cd ~\sales-transcriber
-```
-
-Secret を設定（Step 14 で取得した URL を使用）：
-
-```powershell
-# API エンドポイント URL を設定（$API_ENDPOINT は Step 14 の値）
-gh secret set VITE_API_ENDPOINT --body "$API_ENDPOINT"
+# API エンドポイント URL を設定
+gh secret set VITE_API_ENDPOINT --body "https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com/prod"
 
 # リージョンを設定
 gh secret set VITE_AWS_REGION --body "ap-northeast-1"
 ```
+
+**上記の URL は、実際のエンドポイント URL に置き換えてください。**
 
 確認：
 
@@ -392,68 +230,17 @@ VITE_AWS_REGION    Updated  2026-07-01T12:00:00+09:00
 
 ---
 
-## Step 16: GitHub Pages の有効化
+## Step 10: 動作確認
 
-GitHub Pages で フロントエンドをホストする設定をします。
+### アプリケーションにアクセス
 
-```powershell
-gh api `
-  --method PUT `
-  -H "Accept: application/vnd.github+json" `
-  /repos/:owner/:repo/pages `
-  -f source='{"branch":"main","path":"/"}'
+ブラウザで以下にアクセス：
+
+```
+https://masan-sato.github.io/sales-transcriber/
 ```
 
----
-
-## Step 17: デプロイ & GitHub Actions 実行
-
-ローカルの変更（AWS インフラ用ファイルなど）をコミット・プッシュします。
-
-```powershell
-# Git の初期設定（初回のみ）
-git config --global user.email "your-email@example.com"
-git config --global user.name "Your Name"
-
-# 変更をコミット
-git add .
-git commit -m "feat: deploy realtime transcription"
-
-# GitHub にプッシュ
-git push origin main
-```
-
-プッシュすると GitHub Actions が自動でビルドし、GitHub Pages にデプロイします。
-
-デプロイ状況を確認：
-
-```powershell
-gh run list --limit 5
-```
-
-`completed` と表示されたら完成です。
-
----
-
-## Step 18: アプリケーションにアクセス
-
-デプロイ完了後、ブラウザでアプリにアクセスします。
-
-```powershell
-# ユーザー名を取得
-$GITHUB_USERNAME = gh api /repos/:owner/:repo --jq .owner.login
-
-# アプリ URL を表示
-Write-Host "https://$GITHUB_USERNAME.github.io/sales-transcriber/"
-```
-
-表示された URL をブラウザで開いてください。
-
-例：`https://masan-sato.github.io/sales-transcriber/`
-
----
-
-## Step 19: 動作確認
+（`masan-sato` の部分は実際のリポジトリオーナーのユーザー名に置き換えてください）
 
 ### 通常モード
 1. **「● 録音開始」** をクリック → マイク許可 → 話す → **「■ 録音停止」**
@@ -470,151 +257,78 @@ Write-Host "https://$GITHUB_USERNAME.github.io/sales-transcriber/"
 
 ---
 
-## トラブルシューティング
+## Step 11: ソースコード変更時のデプロイ
 
-### `aws login` がタイムアウトする
+フロントエンド（JavaScript・React コンポーネント）に変更を加えた場合：
 
 ```powershell
-aws login --region ap-northeast-1
+cd ~\sales-transcriber
+
+# 変更をコミット
+git add .
+git commit -m "feat: your feature description"
+
+# GitHub にプッシュ
+git push origin main
 ```
 
-リージョンを明示的に指定してください。
+プッシュすると GitHub Actions が自動でビルドし、GitHub Pages にデプロイします。
 
-### SAM ビルドが失敗する
-
-キャッシュをクリア：
+デプロイ状況を確認：
 
 ```powershell
-Remove-Item -Recurse -Force .aws-sam/
-sam build
-```
-
-### デプロイ後 API が 404 エラーを返す
-
-GitHub Secrets が正しく設定されているか確認：
-
-```powershell
-gh secret list
-```
-
-Secrets が空の場合は Step 15 を再度実行してください。
-
-### アプリにアクセスできない
-
-GitHub Actions のビルドが失敗しているか確認：
-
-```powershell
-gh run list --limit 10
-gh run view <RUN_ID>
-```
-
-### `sam build` で `--cached` オプションが未対応エラーが出る
-
-SAM CLI を更新：
-
-```powershell
-winget upgrade Amazon.SAM-CLI
+gh run list --limit 5
 ```
 
 ---
 
-## クリーンアップ（リソース削除）
+## トラブルシューティング
 
-テスト完了後、AWS の課金を止めるためにリソースを削除します。
+### `gh auth login` がエラーになる
+
+GitHub CLI を最新版にアップデート：
 
 ```powershell
-# アカウント ID を設定
-$ACCOUNT_ID = "697807134024"
-
-# S3 のオブジェクトを削除（先に削除が必要）
-aws s3 rm s3://sales-transcriber-audio-$ACCOUNT_ID-ap-northeast-1 --recursive
-aws s3 rm s3://sales-transcriber-output-$ACCOUNT_ID-ap-northeast-1 --recursive
-aws s3 rm s3://sales-transcriber-sam-$ACCOUNT_ID --recursive
-
-# CloudFormation スタックを削除
-sam delete --stack-name sales-transcriber --region ap-northeast-1
-
-# S3 バケット自体を削除
-aws s3 rb s3://sales-transcriber-sam-$ACCOUNT_ID --force
+winget upgrade GitHub.cli
 ```
+
+### アプリにアクセスできない
+
+1. URL が正しいか確認（`https://[username].github.io/sales-transcriber/`）
+2. API エンドポイント URL が正しく設定されているか確認：
+   ```powershell
+   gh secret list
+   ```
+3. GitHub Actions のビルドが失敗していないか確認：
+   ```powershell
+   gh run list --limit 10
+   ```
+
+### 録音ボタンが反応しない
+
+- ブラウザのマイク許可が有効か確認
+- 別のアプリがマイクを使用していないか確認
+- コンソールエラーを確認（F12 → Console タブ）
 
 ---
 
 ## よくある質問
 
-### Q: デプロイにはどのくらい時間がかかりますか？
+### Q: AWS CLI は必須ですか？
 
-A: 初回は 5〜10 分かかります。再デプロイは 2〜3 分です。
+A: 不要です。AWS インフラはチーム内の管理者が構築・管理します。ローカル環境では GitHub CLI のみで OK です。
 
-### Q: AWS の料金はいくらかかりますか？
+### Q: SAM CLI は必要ですか？
 
-A: 月の使用量が少なければ（月数十回の利用）、ほぼ無料枠内に収まります。詳細は [AWS 無料利用枠](https://aws.amazon.com/jp/free/) を参照してください。
+A: 不要です。AWS Lambda のデプロイはすべてチーム内の管理者が行うため、ローカル環境には不要です。
 
-### Q: winget でインストール失敗する
+### Q: Windows 以外の環境で実行できますか？
 
-A: 別の方法でインストールしてください：
-- Node.js: https://nodejs.org/ からダウンロード
-- Git: https://git-scm.com/download/win からダウンロード
-- AWS CLI: https://awscli.amazonaws.com/AWSCLIV2.msi からダウンロード
-- SAM CLI: https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-install-windows.html
+A: はい。Node.js と Git さえあれば、macOS・Linux でも同じ手順で動作します。
 
-### Q: PowerShell を使いたくない
+### Q: git config を実行する必要はありますか？
 
-A: コマンドプロンプト (cmd.exe) では `^` で行続行してください：
-
-```cmd
-sam deploy ^
-  --stack-name sales-transcriber ^
-  --s3-bucket sales-transcriber-sam-697807134024 ^
-  ...
-```
-
----
-
-## 複数ユーザー向けスキップ手順（AWS インフラ共有）
-
-**パターン A を選んだチームの 2 人目以降** は以下の手順で完成します。
-
-### 準備：最初の 1 人から API エンドポイント URL を受け取る
-
-最初の 1 人が Step 14 で取得した URL：
-```
-https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com/prod
-```
-
-### スキップ手順（2 人目以降）
-
-```powershell
-# ---- Step 2-5: ツール確認 & インストール ----
-node --version  # v20 以上であること
-git --version
-aws --version
-sam --version
-
-# ---- Step 7: AWS 認証 ----
-aws login
-
-# ---- Step 9-10: リポジトリクローン ----
-cd ~
-gh repo clone masan-sato/sales-transcriber
-cd sales-transcriber
-
-# ---- Step 15: GitHub Secrets 設定（最初の 1 人から受け取った URL を使用）----
-$API_ENDPOINT = "https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com/prod"
-gh secret set VITE_API_ENDPOINT --body "$API_ENDPOINT"
-gh secret set VITE_AWS_REGION --body "ap-northeast-1"
-
-# ---- Step 17-18: デプロイ & アクセス ----
-# ソースコード変更がなければ不要。変更がある場合のみ：
-git add .
-git commit -m "your commit message"
-git push origin main
-
-# ブラウザで以下にアクセス
-# https://masan-sato.github.io/sales-transcriber/
-```
-
-**所要時間:** 5〜10 分（AWS インフラのデプロイは不要）
+A: 初回のコミット・プッシュ時に必要です。既に設定済みの場合はスキップできます。
 
 ---
 
@@ -623,33 +337,30 @@ git push origin main
 環境が整っている場合は、以下を上から実行するだけで完成です：
 
 ```powershell
-# ---- ステップ 7-10: 認証・クローン ----
-aws login
-cd ~ 
-gh repo clone masan-sato/sales-transcriber 
+# ---- Step 2-4: ツール確認 ----
+node --version
+git --version
+
+# ---- Step 6-7: GitHub CLI 認証 ----
+gh --version
+gh auth login
+
+# ---- Step 8: リポジトリクローン ----
+cd ~
+gh repo clone masan-sato/sales-transcriber
 cd sales-transcriber
 
-# ---- ステップ 11-14: ビルド・デプロイ ----
-cd ~\sales-transcriber\infrastructure
-sam build
-$ACCOUNT_ID = "697807134024"
-aws s3 mb s3://sales-transcriber-sam-$ACCOUNT_ID --region ap-northeast-1
-sam deploy --stack-name sales-transcriber --s3-bucket sales-transcriber-sam-$ACCOUNT_ID --region ap-northeast-1 --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM
-
-$API_ENDPOINT = aws cloudformation describe-stacks --stack-name sales-transcriber --region ap-northeast-1 --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" --output text
-Write-Host "API: $API_ENDPOINT"
-
-# ---- ステップ 15-17: GitHub Secrets・デプロイ ----
-cd ~\sales-transcriber
-gh secret set VITE_API_ENDPOINT --body "$API_ENDPOINT"
+# ---- Step 9: GitHub Secrets 設定 ----
+# (API_ENDPOINT は AWS インフラ管理者から受け取った URL に置き換え)
+gh secret set VITE_API_ENDPOINT --body "https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com/prod"
 gh secret set VITE_AWS_REGION --body "ap-northeast-1"
-git config --global user.email "your-email@example.com"
-git config --global user.name "Your Name"
-git add . 
-git commit -m "feat: deploy" 
-git push origin main
 
-# ---- ステップ 18: アプリ URL 確認 ----
+# ---- Step 10: アプリ URL ----
 $GITHUB_USERNAME = gh api /repos/:owner/:repo --jq .owner.login
-Write-Host "URL: https://$GITHUB_USERNAME.github.io/sales-transcriber/"
+Write-Host "App URL: https://$GITHUB_USERNAME.github.io/sales-transcriber/"
+
+# ---- Step 11: 変更をコミット（必要に応じて）----
+# git add .
+# git commit -m "your message"
+# git push origin main
 ```

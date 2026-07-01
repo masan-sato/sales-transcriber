@@ -18,14 +18,25 @@ const CORS_HEADERS = {
  * 音声チャンクを async generator でストリーミング
  */
 async function* audioChunkGenerator(body) {
-  const chunks = await body.arrayBuffer();
+  let audioData;
+  
+  // body が Buffer か ArrayBuffer かを判定
+  if (Buffer.isBuffer(body)) {
+    audioData = new Uint8Array(body);
+  } else if (body instanceof ArrayBuffer) {
+    audioData = new Uint8Array(body);
+  } else {
+    const arrayBuffer = await body.arrayBuffer();
+    audioData = new Uint8Array(arrayBuffer);
+  }
+  
   const chunkSize = 1024;
   
-  for (let i = 0; i < chunks.byteLength; i += chunkSize) {
-    const chunk = chunks.slice(i, i + chunkSize);
+  for (let i = 0; i < audioData.length; i += chunkSize) {
+    const chunk = audioData.subarray(i, i + chunkSize);
     yield {
       AudioEvent: {
-        AudioChunk: new Uint8Array(chunk),
+        AudioChunk: chunk,
       },
     };
     // 音声チャンク間に小さい遅延を入れる
