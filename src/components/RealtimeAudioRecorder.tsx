@@ -5,47 +5,143 @@ interface RealtimeAudioRecorderProps {
   isProcessing?: boolean;
 }
 
+/**
+ * PCM データから WAV ファイルを生成
+ */
+function createWavBlob(pcmData: Float32Array, sampleRate: number): Blob {
+  const channelData = [pcmData];
+  const numberOfChannels = channelData.length;
+  const sampleCount = pcmData.length;
+  const bytesPerSample = 2;
+  const blockAlign = numberOfChannels * bytesPerSample;
+
+  const bufferLength = 44 + sampleCount * blockAlign;
+  const arrayBuffer = new ArrayBuffer(bufferLength);
+  const view = new DataView(arrayBuffer);
+
+  const writeString = (offset: number, string: string) => {
+    for (let i = 0; i < string.length; i++) {
+      view.setUint8(offset + i, string.charCodeAt(i));
+    }
+  };
+
+  // WAV ヘッダー（44 バイト）
+  writeString(0, 'RIFF');
+  view.setUint32(4, bufferLength - 8, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true); // subchunk size
+  view.setUint16(20, 1, true); // audio format (PCM)
+  view.setUint16(22, numberOfChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, 16, true); // bits per sample
+
+  writeString(36, 'data');
+  view.setUint32(40, sampleCount * blockAlign, true);
+
+  // PCM データを 16-bit に変換して書き込み
+  let index = 44;
+  for (let i = 0; i < sampleCount; i++) {
+    const sample = Math.max(-1, Math.min(1, pcmData[i]));
+    view.setInt16(index, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+    index += 2;
+  }
+
+  return new Blob([arrayBuffer], { type: 'audio/wav' });
+}
+
 export function RealtimeAudioRecorder({ onRecordingComplete, isProcessing }: RealtimeAudioRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const pcmChunksRef = useRef<Float32Array[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const startRecording = useCallback(async () => {
-    chunksRef.current = [];
+    pcmChunksRef.current = [];
     setSeconds(0);
 
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-    mediaRecorderRef.current = mediaRecorder;
+    const audioContext = new AudioContext();
+    audioContextRef.current = audioContext;
 
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) chunksRef.current.push(e.data);
+    const source = audioContext.createMediaStreamSource(stream);
+    const processor = audioContext.createScriptProcessor(4096, 1, 1);
+    processorRef.current = processor;
+
+    processor.onaudioprocess = (e) => {
+      const pcmData = e.inputBuffer.getChannelData(0);
+      pcmChunksRef.current.push(new Float32Array(pcmData));
     };
 
-    mediaRecorder.onstop = () => {
-      stream.getTracks().forEach((t) => t.stop());
-      const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-      onRecordingComplete(blob);
-    };
+    source.connect(processor);
+    processor.connect(audioContext.destination);
 
-    mediaRecorder.start(1000);
     setIsRecording(true);
-
     timerRef.current = setInterval(() => {
       setSeconds((s) => s + 1);
     }, 1000);
   }, [onRecordingComplete]);
 
   const stopRecording = useCallback(() => {
-    mediaRecorderRef.current?.stop();
+    if (!audioContextRef.current || !processorRef.current) return;
+
+    processorRef.current.disconnect();
+    audioContextRef.current.close();
+
+    // PCM データを結合
+    const totalLength = pcmChunksRef.current.reduce((sum, chunk) => sum + chunk.length, 0);
+    const pcmData = new Float32Array(totalLength);
+    let offset = 0;
+    for (const chunk of pcmChunksRef.current) {
+      pcmData.set(chunk, offset);
+      offset += chunk.length;
+    }
+
+    // WAV フォーマットで Blob を作成（Transcribe Streaming が対応している形式）
+    const wavBlob = createWavBlob(pcmData, audioContextRef.current?.sampleRate || 16000);
+    onRecordingComplete(wavBlob);
+
     setIsRecording(false);
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-  }, []);
+  }, [onRecordingComplete]);
+
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+  };
+
+  return (
+    <div style={styles.container}>
+      <h2 style={styles.title}>🎤 リアルタイム録音</h2>
+      {isRecording && (
+        <div style={styles.timer}>
+          <span style={styles.dot} /> {formatTime(seconds)} 録音中...
+        </div>
+      )}
+      {isProcessing && (
+        <div style={styles.processing}>
+          <span style={styles.spinner} /> 処理中...
+        </div>
+      )}
+      <button
+        style={isRecording ? styles.stopBtn : styles.startBtn}
+        onClick={isRecording ? stopRecording : startRecording}
+        disabled={isProcessing}
+      >
+        {isRecording ? '■ 録音停止' : '● 録音開始'}
+      </button>
+      <p style={styles.note}>マイクへのアクセス許可が必要です</p>
+    </div>
+  );
+}
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);

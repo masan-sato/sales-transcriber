@@ -16,24 +16,27 @@ const CORS_HEADERS = {
 
 /**
  * 音声チャンクを async generator でストリーミング
+ * WAV ファイルを受け取り、ヘッダーをスキップして PCM データを送信
  */
 async function* audioChunkGenerator(body) {
-  let audioData;
+  let audioBuffer;
   
-  // body が Buffer か ArrayBuffer かを判定
+  // body を Buffer に変換
   if (Buffer.isBuffer(body)) {
-    audioData = new Uint8Array(body);
+    audioBuffer = body;
   } else if (body instanceof ArrayBuffer) {
-    audioData = new Uint8Array(body);
+    audioBuffer = Buffer.from(body);
   } else {
     const arrayBuffer = await body.arrayBuffer();
-    audioData = new Uint8Array(arrayBuffer);
+    audioBuffer = Buffer.from(arrayBuffer);
   }
   
+  // WAV ファイルのヘッダーをスキップ（最初の 44 バイト）
+  const pcmData = audioBuffer.slice(44);
   const chunkSize = 1024;
   
-  for (let i = 0; i < audioData.length; i += chunkSize) {
-    const chunk = audioData.subarray(i, i + chunkSize);
+  for (let i = 0; i < pcmData.length; i += chunkSize) {
+    const chunk = pcmData.slice(i, i + chunkSize);
     yield {
       AudioEvent: {
         AudioChunk: chunk,
@@ -65,8 +68,8 @@ export const handler = async (event) => {
     // Transcribe Streaming を開始
     const command = new StartStreamTranscriptionCommand({
       LanguageCode: "ja-JP",
-      MediaSampleRateHertz: 48000,
-      MediaEncoding: "webm",
+      MediaSampleRateHertz: 16000, // AudioContext のデフォルト sample rate
+      MediaEncoding: "pcm", // WAV ファイルに含まれる PCM データ
       AudioStream: audioChunkGenerator(body),
     });
 

@@ -26,7 +26,7 @@ export function useRealtimeTranscribe() {
 
       const response = await fetch(`${apiEndpoint}/stream`, {
         method: 'POST',
-        headers: { 'Content-Type': 'audio/webm' },
+        headers: { 'Content-Type': 'audio/wav' },
         body: audioBlob,
         signal: abortControllerRef.current.signal,
       });
