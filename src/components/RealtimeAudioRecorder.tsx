@@ -1,11 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
 
-interface RealtimeAudioRecorderProps {
-  onRecordingComplete: (file: Blob) => void;
-  onPartialAudio?: (file: Blob) => void;
-  isProcessing?: boolean;
-}
-
 /**
  * PCM データから WAV ファイルを生成
  */
@@ -53,10 +47,20 @@ function createWavBlob(pcmData: Float32Array, sampleRate: number): Blob {
   return new Blob([arrayBuffer], { type: 'audio/wav' });
 }
 
+export interface RealtimeAudioRecorderProps {
+  onRecordingComplete: (file: Blob) => void;
+  onPartialAudio?: (file: Blob) => void;
+  isProcessing?: boolean;
+  onStartRecording?: () => void;
+  onStopRecording?: () => void;
+}
+
 export function RealtimeAudioRecorder({
   onRecordingComplete,
   onPartialAudio,
   isProcessing,
+  onStartRecording,
+  onStopRecording,
 }: RealtimeAudioRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
@@ -67,6 +71,7 @@ export function RealtimeAudioRecorder({
   const streamTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const startRecording = useCallback(async () => {
+    onStartRecording?.();
     pcmChunksRef.current = [];
     setSeconds(0);
 
@@ -144,6 +149,7 @@ export function RealtimeAudioRecorder({
       pcmData,
       audioContextRef.current?.sampleRate || 16000
     );
+    onStopRecording?.();
     onRecordingComplete(wavBlob);
 
     setIsRecording(false);

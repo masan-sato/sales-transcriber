@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { AudioRecorder } from './components/AudioRecorder';
 import { RealtimeAudioRecorder } from './components/RealtimeAudioRecorder';
 import { FileUploader } from './components/FileUploader';
@@ -19,13 +19,6 @@ function App() {
     : mode === 'realtime' && realtime.transcript 
     ? { transcript: realtime.transcript, speakerSegments: realtime.speakerSegments }
     : null;
-
-  // リアルタイムモードに切り替わったら自動で開始
-  useEffect(() => {
-    if (mode === 'realtime' && !realtime.isStreaming) {
-      realtime.startStreaming();
-    }
-  }, [mode, realtime]);
 
   const handleReset = () => {
     if (mode === 'normal') normal.reset();
@@ -83,7 +76,9 @@ function App() {
               <RealtimeAudioRecorder 
                 onRecordingComplete={handleRealtimeRecordComplete} 
                 onPartialAudio={handleRealtimePartialAudio}
-                isProcessing={isProcessing} 
+                isProcessing={isProcessing}
+                onStartRecording={() => realtime.startStreaming()}
+                onStopRecording={() => {}}
               />
             )}
           </>
